@@ -1,0 +1,46 @@
+name: Python_Nexus_Integration_Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
+
+      - name: Install Dependencies
+        run: pip install flask
+
+      - name: Build Docker Image #add dockerhub username to github secrets
+        run: docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/flask-app:latest .
+
+      - name: Log in to Docker Hub #add dockerhub username and passwordsto github secrets
+        run: echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
+
+      - name: Push Docker Image to Docker Hub 
+        run: docker push ${{ secrets.DOCKER_HUB_USERNAME }}/flask-app:latest
+
+      - name: Tag Docker Image for Nexus
+        run: docker tag ${{ secrets.DOCKER_HUB_USERNAME }}/flask-app:latest ${{ secrets.NEXUS_HOST }}/docker-repo/flask-app:latest
+
+      - name: Allow HTTP for Nexus Docker Registry
+        run: |
+          echo '{ "insecure-registries": ["${{ secrets.NEXUS_HOST }}"] }' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+          sudo systemctl daemon-reexec
+
+      - name: Log in to Nexus Docker Repo #add nexus username and password to github secrets
+        run: echo "${{ secrets.NEXUS_PASSWORD }}" | docker login -u "${{ secrets.NEXUS_USERNAME }}" --password-stdin http://${{ secrets.NEXUS_HOST }}
+
+      - name: Push Docker Image to Nexus #add nexus host url to github secrets
+        run: docker push ${{ secrets.NEXUS_HOST }}/docker-repo/flask-app:latest

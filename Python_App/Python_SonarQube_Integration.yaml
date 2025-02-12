@@ -1,0 +1,39 @@
+name: Python_SonarQube_Integration_Pipeline
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install SonarScanner
+        run: |
+          pip install sonar-scanner-cli
+
+      - name: Run SonarQube Analysis
+        env:
+          SONAR_HOST_URL: "http://13.234.111.118:9000/"  # Change IP
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |       # Change projectkey
+          sonar-scanner \
+            -Dsonar.projectKey=python-github-actions \
+            -Dsonar.sources=. \
+            -Dsonar.host.url=$SONAR_HOST_URL \
+            -Dsonar.login=$SONAR_TOKEN

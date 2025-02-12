@@ -1,0 +1,57 @@
+name: Java Spring Boot CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Dependencies & Build
+        run: mvn clean package -DskipTests
+
+      - name: Run SonarQube Analysis
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          mvn sonar:sonar \
+            -Dsonar.projectKey=spring-boot-app \
+            -Dsonar.host.url=$SONAR_HOST_URL \
+            -Dsonar.login=$SONAR_TOKEN
+
+      - name: Build Docker Image
+        run: docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/spring-boot-app:latest .
+
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
+
+      - name: Push Docker Image to Docker Hub
+        run: docker push ${{ secrets.DOCKER_HUB_USERNAME }}/spring-boot-app:latest
+
+      - name: Allow HTTP for Nexus Docker Registry
+        run: |
+          echo '{ "insecure-registries": ["${{ secrets.NEXUS_URL }}"] }' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+          sudo systemctl daemon-reexec
+
+      - name: Tag Docker Image for Nexus
+        run: docker tag ${{ secrets.DOCKER_HUB_USERNAME }}/spring-boot-app:latest ${{ secrets.NEXUS_URL }}/docker-repo/spring-boot-app:latest
+
+      - name: Log in to Nexus Docker Repo
+        run: echo "${{ secrets.NEXUS_PASSWORD }}" | docker login -u "${{ secrets.NEXUS_USERNAME }}" --password-stdin http://${{ secrets.NEXUS_URL }}
+
+      - name: Push Docker Image to Nexus
+        run: docker push ${{ secrets.NEXUS_URL }}/docker-repo/spring-boot-app:latest

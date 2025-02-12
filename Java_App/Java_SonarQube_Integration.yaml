@@ -1,0 +1,29 @@
+name: Java_SonarQube_Integration_Pipeline
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Set up JDK 1.8
+      uses: actions/setup-java@v1
+      with:
+        java-version: 1.8
+    - name: Build with Maven
+      run: mvn package --file pom.xml
+
+      - name: SonarQube Analysis
+        env:
+          SONAR_HOST_URL: "http://13.234.111.118:9000/"  # Change IP
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |   #change projectkey
+          mvn sonar:sonar \
+            -Dsonar.projectKey=java-github-actions \
+            -Dsonar.host.url=$SONAR_HOST_URL \
+            -Dsonar.login=$SONAR_TOKEN

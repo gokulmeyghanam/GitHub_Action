@@ -1,0 +1,58 @@
+name: Node.js Express CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run SonarQube Analysis
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          npm install -g sonarqube-scanner
+          sonar-scanner \
+            -Dsonar.projectKey=nodejs-app \
+            -Dsonar.sources=. \
+            -Dsonar.host.url=$SONAR_HOST_URL \
+            -Dsonar.login=$SONAR_TOKEN
+
+      - name: Build Docker Image
+        run: docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/nodejs-app:latest .
+
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
+
+      - name: Push Docker Image to Docker Hub
+        run: docker push ${{ secrets.DOCKER_HUB_USERNAME }}/nodejs-app:latest
+
+      - name: Allow HTTP for Nexus Docker Registry
+        run: |
+          echo '{ "insecure-registries": ["${{ secrets.NEXUS_URL }}"] }' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+          sudo systemctl daemon-reexec
+
+      - name: Tag Docker Image for Nexus
+        run: docker tag ${{ secrets.DOCKER_HUB_USERNAME }}/nodejs-app:latest ${{ secrets.NEXUS_URL }}/docker-repo/nodejs-app:latest
+
+      - name: Log in to Nexus Docker Repo
+        run: echo "${{ secrets.NEXUS_PASSWORD }}" | docker login -u "${{ secrets.NEXUS_USERNAME }}" --password-stdin http://${{ secrets.NEXUS_URL }}
+
+      - name: Push Docker Image to Nexus
+        run: docker push ${{ secrets.NEXUS_URL }}/docker-repo/nodejs-app:latest
